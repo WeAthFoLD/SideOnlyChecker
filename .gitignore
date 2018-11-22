@@ -1,0 +1,29 @@
+# eclipse
+bin
+*.launch
+.settings
+.metadata
+.classpath
+.project
+
+# packages
+*.jar
+!gradle-wrapper.jar
+
+# idea
+out
+*.ipr
+*.iws
+*.iml
+.idea
+logs/
+
+# gradle
+build
+.gradle
+
+# other
+eclipse
+run
+.vscode/
+.idea/
