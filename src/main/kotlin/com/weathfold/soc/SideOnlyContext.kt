@@ -16,32 +16,32 @@ class SideOnlyContext(val files: List<PsiFile>) {
         val SideOnlyAnnoName = "net.minecraftforge.fml.relauncher.SideOnly"
     }
 
-    private val javaClasses: List<PsiClass> = run {
-        val res = ArrayList<PsiClass>()
+    private val clientOnlyClasses = ArrayList<PsiClass>()
+    private val clientOnlyMethods = ArrayList<PsiMethod>()
+    private val clientOnlyFields = ArrayList<PsiField>()
+
+    init {
         files.forEach { it.accept(object : JavaRecursiveElementWalkingVisitor() {
             override fun visitClass(aClass: PsiClass) {
                 super.visitClass(aClass)
-                res += aClass
+                if (isClientOnlyClass(aClass))
+                    clientOnlyClasses.add(aClass)
             }
-        } ) }
-        res
+
+            override fun visitMethod(method: PsiMethod) {
+                super.visitMethod(method)
+                if (method.hasAnnotation(SideOnlyAnnoName))
+                    clientOnlyMethods.add(method)
+            }
+
+            override fun visitField(field: PsiField) {
+                super.visitField(field)
+                if (field.hasAnnotation(SideOnlyAnnoName))
+                    clientOnlyFields.add(field)
+            }
+
+        })}
     }
-
-    private val clientOnlyClasses: List<PsiClass> = javaClasses
-        .filter { isClientOnlyClass(it) }
-
-    private val clientOnlyMethods: List<PsiMethod> = run {
-        val directMarkedMethods = javaClasses
-            .flatMap { it.methods.toList() }
-            .filter { it.hasAnnotation(SideOnlyAnnoName) }
-//        val indirectMethods = clientOnlyClasses
-//            .flatMap { it.methods.toList() }
-        directMarkedMethods
-    }
-
-    private val clientOnlyFields: List<PsiField> = javaClasses
-        .flatMap { it.fields.toList() }
-        .filter { it.hasAnnotation(SideOnlyAnnoName) }
 
     val errorClassReference = clientOnlyClasses
         .flatMap { klass -> ReferencesSearch.search(klass).map { ClassErrorItem(it, klass) } }
@@ -55,6 +55,9 @@ class SideOnlyContext(val files: List<PsiFile>) {
         .flatMap { field -> ReferencesSearch.search(field).map { FieldErrorItem(it, field) } }
         .filter { !isInClientOnlyContext(it.ref.element) }
 
+    val errorFieldInitializers = clientOnlyFields
+        .filter { it.hasInitializer() }
+
     private fun isClientOnlyClass(c: PsiClass): Boolean {
         var cur = c
         while (true) {
@@ -67,11 +70,6 @@ class SideOnlyContext(val files: List<PsiFile>) {
                     return false
             }
         }
-    }
-
-    private fun collectAllClasses(list: ArrayList<PsiClass>, cur: PsiClass) {
-        list += cur
-        cur.innerClasses.forEach { collectAllClasses(list, it) }
     }
 
     private fun isInClientOnlyContext(elem: PsiElement): Boolean {
