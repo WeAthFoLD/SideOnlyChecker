@@ -20,6 +20,8 @@ class SideOnlyContext(val files: List<PsiFile>) {
     private val clientOnlyMethods = ArrayList<PsiMethod>()
     private val clientOnlyFields = ArrayList<PsiField>()
 
+    private val ignoreSideOnlyMethods = ArrayList<PsiMethod>()
+
     init {
         files.forEach { it.accept(object : JavaRecursiveElementWalkingVisitor() {
             override fun visitClass(aClass: PsiClass) {
@@ -32,6 +34,8 @@ class SideOnlyContext(val files: List<PsiFile>) {
                 super.visitMethod(method)
                 if (method.hasAnnotation(SideOnlyAnnoName))
                     clientOnlyMethods.add(method)
+                if (method.doesIgnoreSideOnly())
+                    ignoreSideOnlyMethods.add(method)
             }
 
             override fun visitField(field: PsiField) {
@@ -50,6 +54,10 @@ class SideOnlyContext(val files: List<PsiFile>) {
     val errorMethodReferences = clientOnlyMethods
         .flatMap { method -> MethodReferencesSearch.search(method).map { MethodErrorItem(it, method) } }
         .filter { !isInClientOnlyContext(it.ref.element) }
+        .filter {
+            val parentMethod = PsiTreeUtil.getParentOfType(it.ref.element, PsiMethod::class.java)
+            parentMethod == null || !ignoreSideOnlyMethods.contains(parentMethod)
+        }
 
     val errorFieldReferences = clientOnlyFields
         .flatMap { field -> ReferencesSearch.search(field).map { FieldErrorItem(it, field) } }
@@ -69,6 +77,16 @@ class SideOnlyContext(val files: List<PsiFile>) {
                 } else
                     return false
             }
+        }
+    }
+
+    private fun PsiMethod.doesIgnoreSideOnly(): Boolean {
+        val anno = getAnnotation("java.lang.SuppressWarnings")
+        return if (anno != null) {
+            val parameterList = PsiTreeUtil.findChildOfType(anno, PsiAnnotationParameterList::class.java)!!
+            parameterList.attributes.any { it.literalValue.equals("SIDEONLY", ignoreCase = true) }
+        } else {
+            false
         }
     }
 
