@@ -51,6 +51,15 @@ class SOCRegistration(val p: Project) : ProjectComponent {
                 // http://www.jetbrains.org/intellij/sdk/docs/basics/architectural_overview/general_threading_rules.html
                 ReadAction.run<Nothing> {
                     val ctx = SideOnlyContext(items.mapNotNull { psiManager.findFile(it.file) }.toList())
+                    ctx.errorClassReference.forEach {
+                        val doc = documentManager.getDocument(it.ref.element.containingFile)!!
+                        context.addMessage(
+                            CompilerMessageCategory.ERROR,
+                            "SideOnly: Class ref ${it.klass.displayClassName()} from invalid context",
+                            it.ref.element.containingFile.virtualFile.url,
+                            doc.getLineNumber(it.ref.element.textOffset) + 1, 0
+                        )
+                    }
                     ctx.errorMethodReferences.forEach {
                         val doc = documentManager.getDocument(it.ref.element.containingFile)!!
                         context.addMessage(

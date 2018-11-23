@@ -6,6 +6,7 @@ import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.psi.util.parentsOfType
 
+class ClassErrorItem(val ref: PsiReference, val klass: PsiClass)
 class MethodErrorItem(val ref: PsiReference, val method: PsiMethod)
 class FieldErrorItem(val ref: PsiReference, val field: PsiField)
 
@@ -15,7 +16,7 @@ class SideOnlyContext(val files: List<PsiFile>) {
         val SideOnlyAnnoName = "net.minecraftforge.fml.relauncher.SideOnly"
     }
 
-    val javaClasses: List<PsiClass> = run {
+    private val javaClasses: List<PsiClass> = run {
         val res = ArrayList<PsiClass>()
         files.forEach { it.accept(object : JavaRecursiveElementWalkingVisitor() {
             override fun visitClass(aClass: PsiClass) {
@@ -26,21 +27,25 @@ class SideOnlyContext(val files: List<PsiFile>) {
         res
     }
 
-    val clientOnlyClasses: List<PsiClass> = javaClasses
+    private val clientOnlyClasses: List<PsiClass> = javaClasses
         .filter { isClientOnlyClass(it) }
 
-    val clientOnlyMethods: List<PsiMethod> = run {
+    private val clientOnlyMethods: List<PsiMethod> = run {
         val directMarkedMethods = javaClasses
             .flatMap { it.methods.toList() }
             .filter { it.hasAnnotation(SideOnlyAnnoName) }
-        val indirectMethods = clientOnlyClasses
-            .flatMap { it.methods.toList() }
-        (directMarkedMethods + indirectMethods).distinct()
+//        val indirectMethods = clientOnlyClasses
+//            .flatMap { it.methods.toList() }
+        directMarkedMethods
     }
 
-    val clientOnlyFields: List<PsiField> = javaClasses
+    private val clientOnlyFields: List<PsiField> = javaClasses
         .flatMap { it.fields.toList() }
         .filter { it.hasAnnotation(SideOnlyAnnoName) }
+
+    val errorClassReference = clientOnlyClasses
+        .flatMap { klass -> ReferencesSearch.search(klass).map { ClassErrorItem(it, klass) } }
+        .filter { !isInClientOnlyContext(it.ref.element) }
 
     val errorMethodReferences = clientOnlyMethods
         .flatMap { method -> MethodReferencesSearch.search(method).map { MethodErrorItem(it, method) } }
@@ -87,9 +92,12 @@ class SideOnlyContext(val files: List<PsiFile>) {
             is PsiMember -> {
                 return clientOnlyMethods.contains(elem) || isInClientOnlyContext(elem.containingClass!!)
             }
+//            is PsiImportStatementBase -> {
+//                return true
+//            }
             else -> {
                 val parent = PsiTreeUtil.getParentOfType(elem, PsiMember::class.java)
-                return if (parent == null) false else isInClientOnlyContext(parent)
+                return if (parent == null) true else isInClientOnlyContext(parent)
             }
 //            else -> error("Unsupport type: $elem")
         }
