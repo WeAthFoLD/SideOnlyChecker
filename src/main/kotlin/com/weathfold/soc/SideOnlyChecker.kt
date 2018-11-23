@@ -55,7 +55,7 @@ class SOCRegistration(val p: Project) : ProjectComponent {
                         val doc = documentManager.getDocument(it.ref.element.containingFile)!!
                         context.addMessage(
                             CompilerMessageCategory.ERROR,
-                            "SideOnly: Method ref ${it.method.containingClass!!.name}#${it.method.name} from invalid context",
+                            "SideOnly: Method ref ${it.method.containingClass.displayClassName()}#${it.method.name} from invalid context",
                             it.ref.element.containingFile.virtualFile.url,
                             doc.getLineNumber(it.ref.element.textOffset) + 1, 0
                         )
@@ -64,7 +64,7 @@ class SOCRegistration(val p: Project) : ProjectComponent {
                         val doc = documentManager.getDocument(it.ref.element.containingFile)!!
                         context.addMessage(
                             CompilerMessageCategory.ERROR,
-                            "SideOnly: Field ref ${it.field.containingClass!!.name}#${it.field.name} from invalid context",
+                            "SideOnly: Field ref ${it.field.containingClass.displayClassName()}#${it.field.name} from invalid context",
                             it.ref.element.containingFile.virtualFile.url,
                             doc.getLineNumber(it.ref.element.textOffset) + 1, 0
                         )
@@ -75,6 +75,8 @@ class SOCRegistration(val p: Project) : ProjectComponent {
 
         })
     }
+
+    fun PsiClass?.displayClassName() = this?.name ?: "<anon>"
 
     override fun projectClosed() {
     }

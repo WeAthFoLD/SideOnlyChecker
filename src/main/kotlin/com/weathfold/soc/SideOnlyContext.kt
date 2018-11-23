@@ -15,21 +15,19 @@ class SideOnlyContext(val files: List<PsiFile>) {
         val SideOnlyAnnoName = "net.minecraftforge.fml.relauncher.SideOnly"
     }
 
-    val javaClasses: List<PsiClass> = files.filter { it is PsiJavaFile }
-        .map { it as PsiJavaFile }
-        .flatMap { it.classes.toList() }
-        .flatMap {
-            val list = ArrayList<PsiClass>()
-            collectAllClasses(list, it)
-            list
-        }
-
-    init {
-        SDebug.notifyInfo("All classes", javaClasses.joinToString())
+    val javaClasses: List<PsiClass> = run {
+        val res = ArrayList<PsiClass>()
+        files.forEach { it.accept(object : JavaRecursiveElementWalkingVisitor() {
+            override fun visitClass(aClass: PsiClass) {
+                super.visitClass(aClass)
+                res += aClass
+            }
+        } ) }
+        res
     }
 
     val clientOnlyClasses: List<PsiClass> = javaClasses
-        .filter { it.hasAnnotation(SideOnlyAnnoName) }
+        .filter { isClientOnlyClass(it) }
 
     val clientOnlyMethods: List<PsiMethod> = run {
         val directMarkedMethods = javaClasses
@@ -51,6 +49,20 @@ class SideOnlyContext(val files: List<PsiFile>) {
     val errorFieldReferences = clientOnlyFields
         .flatMap { field -> ReferencesSearch.search(field).map { FieldErrorItem(it, field) } }
         .filter { !isInClientOnlyContext(it.ref.element) }
+
+    private fun isClientOnlyClass(c: PsiClass): Boolean {
+        var cur = c
+        while (true) {
+            if (cur.hasAnnotation(SideOnlyAnnoName))
+                return true
+            else {
+                if (cur.superClass != null) {
+                    cur = cur.superClass!!
+                } else
+                    return false
+            }
+        }
+    }
 
     private fun collectAllClasses(list: ArrayList<PsiClass>, cur: PsiClass) {
         list += cur
@@ -77,7 +89,6 @@ class SideOnlyContext(val files: List<PsiFile>) {
             }
             else -> {
                 val parent = PsiTreeUtil.getParentOfType(elem, PsiMember::class.java)
-                SDebug.notifyInfo(elem.toString(), "Parent is: " + parent.toString())
                 return if (parent == null) false else isInClientOnlyContext(parent)
             }
 //            else -> error("Unsupport type: $elem")
