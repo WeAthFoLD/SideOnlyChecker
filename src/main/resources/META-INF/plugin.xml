@@ -2,6 +2,7 @@
     <id>com.weathfold.SideOnlyChecker</id>
     <name>SideOnly Checker</name>
     <vendor email="weathfold@li-dev.cn" url="http://weathfold.github.io">WeAthFolD</vendor>
+    <version>0.1.2</version>
 
     <description><![CDATA[
         A plugin for MinecraftForge mods to check valid usage of @SideOnly annotation.
@@ -10,8 +11,10 @@
     <!-- please see http://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/plugin_compatibility.html
          on how to target different products -->
     <!-- uncomment to enable plugin in all products
-    <depends>com.intellij.modules.lang</depends>
     -->
+    <depends>com.intellij.modules.lang</depends>
+    <!-- <depends>com.intellij.modules.platform</depends> -->
+    <!-- <depends>com.intellij.modules.java</depends> -->
 
     <extensions defaultExtensionNs="com.intellij">
         <!-- Add your extensions here -->
