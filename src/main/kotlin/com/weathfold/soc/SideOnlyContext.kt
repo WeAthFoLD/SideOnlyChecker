@@ -38,6 +38,13 @@ class SideOnlyContext(val files: List<PsiFile>) {
                     ignoreSideOnlyMethods.add(method)
             }
 
+            override fun visitAnonymousClass(aClass: PsiAnonymousClass) {
+                super.visitAnonymousClass(aClass)
+                val containingClass = PsiTreeUtil.getParentOfType(aClass, PsiClass::class.java)!!
+                if (isClientOnlyClass(containingClass))
+                    clientOnlyClasses.add(aClass)
+            }
+
             override fun visitField(field: PsiField) {
                 super.visitField(field)
                 if (field.hasAnnotation(SideOnlyAnnoName))
@@ -50,6 +57,10 @@ class SideOnlyContext(val files: List<PsiFile>) {
     val errorClassReference = clientOnlyClasses
         .flatMap { klass -> ReferencesSearch.search(klass).map { ClassErrorItem(it, klass) } }
         .filter { !isInClientOnlyContext(it.ref.element) }
+        .filter {
+            val parentMethod = PsiTreeUtil.getParentOfType(it.ref.element, PsiMethod::class.java)
+            parentMethod == null || !ignoreSideOnlyMethods.contains(parentMethod)
+        }
 
     val errorMethodReferences = clientOnlyMethods
         .flatMap { method -> MethodReferencesSearch.search(method).map { MethodErrorItem(it, method) } }
@@ -62,6 +73,10 @@ class SideOnlyContext(val files: List<PsiFile>) {
     val errorFieldReferences = clientOnlyFields
         .flatMap { field -> ReferencesSearch.search(field).map { FieldErrorItem(it, field) } }
         .filter { !isInClientOnlyContext(it.ref.element) }
+        .filter {
+            val parentMethod = PsiTreeUtil.getParentOfType(it.ref.element, PsiMethod::class.java)
+            parentMethod == null || !ignoreSideOnlyMethods.contains(parentMethod)
+        }
 
     val errorFieldInitializers = clientOnlyFields
         .filter { it.hasInitializer() }
@@ -113,6 +128,7 @@ class SideOnlyContext(val files: List<PsiFile>) {
 //            }
             else -> {
                 val parent = PsiTreeUtil.getParentOfType(elem, PsiMember::class.java)
+//                SDebug.notifyInfo(elem.containingFile!!.name + "/" + elem.toString(), "parent=$parent")
                 return if (parent == null) true else isInClientOnlyContext(parent)
             }
 //            else -> error("Unsupport type: $elem")
