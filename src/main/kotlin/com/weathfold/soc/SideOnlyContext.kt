@@ -1,6 +1,8 @@
 package com.weathfold.soc
 
+import com.intellij.openapi.project.Project
 import com.intellij.psi.*
+import com.intellij.psi.impl.search.JavaFilesSearchScope
 import com.intellij.psi.search.searches.MethodReferencesSearch
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.util.PsiTreeUtil
@@ -10,7 +12,7 @@ class ClassErrorItem(val ref: PsiReference, val klass: PsiClass)
 class MethodErrorItem(val ref: PsiReference, val method: PsiMethod)
 class FieldErrorItem(val ref: PsiReference, val field: PsiField)
 
-class SideOnlyContext(val files: List<PsiFile>) {
+class SideOnlyContext(val project: Project, val files: List<PsiFile>) {
 
     companion object {
         val SideOnlyAnnoName = "net.minecraftforge.fml.relauncher.SideOnly"
@@ -21,6 +23,8 @@ class SideOnlyContext(val files: List<PsiFile>) {
     private val clientOnlyFields = ArrayList<PsiField>()
 
     private val ignoreSideOnlyMethods = ArrayList<PsiMethod>()
+
+    private val searchScope = JavaFilesSearchScope(project)
 
     init {
         files.forEach { it.accept(object : JavaRecursiveElementWalkingVisitor() {
@@ -41,8 +45,17 @@ class SideOnlyContext(val files: List<PsiFile>) {
             override fun visitAnonymousClass(aClass: PsiAnonymousClass) {
                 super.visitAnonymousClass(aClass)
                 val containingClass = PsiTreeUtil.getParentOfType(aClass, PsiClass::class.java)!!
-                if (isClientOnlyClass(containingClass))
+                if (isClientOnlyClass(containingClass)) {
                     clientOnlyClasses.add(aClass)
+                    return
+                }
+
+                val containingMethod = PsiTreeUtil.getParentOfType(aClass, PsiMethod::class.java)
+                if (containingMethod != null && containingMethod.hasAnnotation(SideOnlyAnnoName)) {
+                    clientOnlyClasses.add(aClass)
+                    return
+                }
+
             }
 
             override fun visitField(field: PsiField) {
@@ -55,7 +68,8 @@ class SideOnlyContext(val files: List<PsiFile>) {
     }
 
     val errorClassReference = clientOnlyClasses
-        .flatMap { klass -> ReferencesSearch.search(klass).map { ClassErrorItem(it, klass) } }
+        .flatMap { klass -> ReferencesSearch.search(klass, searchScope).map { ClassErrorItem(it, klass) } }
+        .filter { !it.ref.element.isInComment() }
         .filter { !isInClientOnlyContext(it.ref.element) }
         .filter {
             val parentMethod = PsiTreeUtil.getParentOfType(it.ref.element, PsiMethod::class.java)
@@ -63,7 +77,8 @@ class SideOnlyContext(val files: List<PsiFile>) {
         }
 
     val errorMethodReferences = clientOnlyMethods
-        .flatMap { method -> MethodReferencesSearch.search(method).map { MethodErrorItem(it, method) } }
+        .flatMap { method -> MethodReferencesSearch.search(method, searchScope, true).map { MethodErrorItem(it, method) } }
+        .filter { !it.ref.element.isInComment() }
         .filter { !isInClientOnlyContext(it.ref.element) }
         .filter {
             val parentMethod = PsiTreeUtil.getParentOfType(it.ref.element, PsiMethod::class.java)
@@ -71,7 +86,8 @@ class SideOnlyContext(val files: List<PsiFile>) {
         }
 
     val errorFieldReferences = clientOnlyFields
-        .flatMap { field -> ReferencesSearch.search(field).map { FieldErrorItem(it, field) } }
+        .flatMap { field -> ReferencesSearch.search(field, searchScope).map { FieldErrorItem(it, field) } }
+        .filter { !it.ref.element.isInComment() }
         .filter { !isInClientOnlyContext(it.ref.element) }
         .filter {
             val parentMethod = PsiTreeUtil.getParentOfType(it.ref.element, PsiMethod::class.java)
@@ -82,6 +98,10 @@ class SideOnlyContext(val files: List<PsiFile>) {
         .filter { it.hasInitializer() }
 
     private fun isClientOnlyClass(c: PsiClass): Boolean {
+        val innerAndParentRemoved = c.containingClass?.let { isClientOnlyClass(it) } ?: false
+        if (innerAndParentRemoved)
+            return true
+
         var cur = c
         while (true) {
             if (cur.hasAnnotation(SideOnlyAnnoName))
@@ -93,6 +113,11 @@ class SideOnlyContext(val files: List<PsiFile>) {
                     return false
             }
         }
+
+    }
+
+    private fun PsiElement.isInComment(): Boolean {
+        return PsiTreeUtil.getParentOfType(this, PsiComment::class.java) != null
     }
 
     private fun PsiMethod.doesIgnoreSideOnly(): Boolean {
@@ -121,7 +146,9 @@ class SideOnlyContext(val files: List<PsiFile>) {
                 return false
             }
             is PsiMember -> {
-                return clientOnlyMethods.contains(elem) || isInClientOnlyContext(elem.containingClass!!)
+                return clientOnlyMethods.contains(elem) ||
+                    clientOnlyFields.contains(elem) ||
+                    with(elem.containingClass) { if (this == null) true else isInClientOnlyContext(this) }
             }
 //            is PsiImportStatementBase -> {
 //                return true

@@ -2,7 +2,7 @@
     <id>com.weathfold.SideOnlyChecker</id>
     <name>SideOnly Checker</name>
     <vendor email="weathfold@li-dev.cn" url="http://weathfold.github.io">WeAthFolD</vendor>
-    <version>0.1.3</version>
+    <idea-version since-build="182.*" until-build="183.*"/>
 
     <description><![CDATA[
         A plugin for MinecraftForge mods to check valid usage of @SideOnly annotation.
